@@ -1,0 +1,13 @@
+{
+  "name": "travel-planner-bot",
+  "version": "1.0.0",
+  "description": "旅遊規劃師 Telegram Bot for Yvonne",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "axios": "^1.7.7"
+  }
+}
