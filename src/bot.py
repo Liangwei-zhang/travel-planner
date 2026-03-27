@@ -12,7 +12,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # Configuration - 從環境變數讀取
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN")
-OWNER_ID = os.environ.get("OWNER_ID", "6390423676")
+OWNER_ID = os.environ.get("OWNER_ID")
 
 if not BOT_TOKEN:
     print("❌ 錯誤：請設定 TELEGRAM_BOT_TOKEN 環境變數")
@@ -49,6 +49,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """處理用戶訊息"""
+    # 檢查是否為 owner
+    if OWNER_ID and str(update.message.from_user.id) != OWNER_ID:
+        return  # 忽略非 owner 的訊息
+    
     destination = update.message.text.strip()
     
     # 顯示規劃中的訊息
@@ -82,8 +86,55 @@ def generate_plan_from_db(destination: str, data: dict) -> str:
     attractions = "\n".join([f"  • {a}" for a in data["attractions"]])
     food = "\n".join([f"  • {f}" for f in data["food"]])
     transport = "\n".join([f"  • {t}" for t in data["transport"]])
-    accommodation = "\n".join([f"  • {a}" for a in data["accommodation"]])
+    
+    # 住宿處理（支援新舊格式）
+    if isinstance(data.get("accommodation"), dict):
+        acc_budget = "\n".join([f"  • {a}" for a in data["accommodation"].get("budget", [])])
+        acc_mid = "\n".join([f"  • {a}" for a in data["accommodation"].get("mid", [])])
+        acc_luxury = "\n".join([f"  • {a}" for a in data["accommodation"].get("luxury", [])])
+        accommodation_str = f"""💰 經濟型：
+{acc_budget}
+🏠 中檔：
+{acc_mid}
+🌟 豪華：
+{acc_luxury}"""
+    else:
+        accommodation_str = "\n".join([f"  • {a}" for a in data["accommodation"]])
+    
     customs = "\n".join([f"  • {c}" for c in data["customs"]])
+    
+    # 每日行程
+    itinerary_text = ""
+    if "itinerary" in data:
+        for day, activities in data["itinerary"].items():
+            day_name = day.replace("day", "Day ")
+            itinerary_text += f"\n{day_name}: {' → '.join(activities)}"
+    
+    # 機場交通
+    airport_text = data.get("airport_transport", "請查詢當地交通官網")
+    
+    # 穿搭建議
+    clothing_text = data.get("clothing", "建議穿著舒適，視季節而定")
+    
+    # 緊急聯絡
+    emergency_text = ""
+    if "emergency" in data:
+        em = data["emergency"]
+        emergency_text = f"""🚨 緊急電話：
+  • 報警：{em.get('police', 'N/A')}
+  • 救護車：{em.get('ambulance', 'N/A')}
+  • 旅遊警察：{em.get('tourist_police', em.get('tourist_service', em.get('tourist_hotline', 'N/A')))}
+  • 駐外單位：{em.get('embassy', 'N/A')}"""
+    
+    # 預算細項
+    budget_text = ""
+    if "budget_breakdown" in data:
+        bb = data["budget_breakdown"]
+        budget_text = f"""📊 預算細項（每日）：
+  • 住宿：{bb.get('accommodation', 'N/A')}
+  • 餐飲：{bb.get('food', 'N/A')}
+  • 交通：{bb.get('transport', 'N/A')}
+  • 娛樂：{bb.get('entertainment', 'N/A')}"""
     
     plan = f"""🎯 **{destination}** 旅遊規劃
 
@@ -93,22 +144,34 @@ def generate_plan_from_db(destination: str, data: dict) -> str:
 🍜 【當地美食】
 {food}
 
+📅 【每日行程】{itinerary_text}
+
 💰 【預算估算】(每日)
   • 經濟型：{data['budget_daily']['budget']}
   • 中檔：{data['budget_daily']['mid']}
   • 豪華：{data['budget_daily']['luxury']}
 
+{budget_text}
+
 🚗 【交通指南】
 {transport}
 
+✈️ 【機場交通】
+{airport_text}
+
 🏨 【住宿推薦】
-{accommodation}
+{accommodation_str}
 
 🌤️ 【最佳旅遊季節】
   {data['best_season']}
 
+👕 【穿搭建議】
+{clothing_text}
+
 ⚠️ 【當地習俗與安全】
 {customs}
+
+{emergency_text}
 
 💵 當地貨幣：{data['currency']}
 

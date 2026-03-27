@@ -11,7 +11,7 @@ const PlanGenerator = require('./src/generator');
 
 // 配置 - 從環境變數讀取
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
-const OWNER_ID = process.env.OWNER_ID || '6390423676';
+const OWNER_ID = process.env.OWNER_ID;
 
 // 驗證必要的環境變數
 if (!BOT_TOKEN) {
@@ -33,7 +33,6 @@ let lastUpdateId = 0;
 async function handleMessage(message) {
   const chatId = message.chat.id;
   const text = message.text || '';
-  const messageId = message.message_id;
 
   // 忽略命令
   if (text.startsWith('/')) {
