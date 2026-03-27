@@ -24,6 +24,18 @@ DATA_PATH = Path(__file__).parent.parent / "data" / "destinations.json"
 with open(DATA_PATH, "r", encoding="utf-8") as f:
     DESTINATION_DB = json.load(f)
 
+# 匯入模組
+from modules.storage import storage
+from modules.feedback import feedback_command
+from modules.preferences import prefs_command, get_user_prefs
+from modules.favorites import save_command, saved_command, remove_command
+from modules.share import share_command, sharelink_command
+from modules.weather import weather_command, get_weather_sync
+
+
+# 儲存最後規劃的目的地（供收藏使用）
+user_context = {}
+
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """歡迎命令"""
@@ -47,6 +59,38 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_text)
 
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """幫助命令"""
+    help_text = """📚 旅遊規劃師 - 指令列表
+
+🗺️ 主要指令：
+/start - 開始使用
+/help - 顯示幫助
+/weather <城市> - 查看天氣
+
+⚙️ 個人化設定：
+/prefs - 查看/設定偏好
+  /prefs days <天數> - 設定行程天數 (1-14)
+  /prefs budget <經濟|中檔|豪華> - 設定預算
+  /prefs tags <標籤> ... - 設定興趣標籤
+
+📁 收藏功能：
+/save <目的地> - 收藏規劃
+/saved - 查看收藏
+/remove <編號> - 刪除收藏
+
+📤 分享功能：
+/share <目的地> - 生成分享訊息
+/sharelink <目的地> - 生成分享連結
+
+💬 反饋：
+/feedback <建議> - 提交反饋
+
+---
+直接輸入城市名稱即可獲得規劃！"""
+    await update.message.reply_text(help_text)
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """處理用戶訊息"""
     # 檢查是否為 owner
@@ -54,6 +98,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return  # 忽略非 owner 的訊息
     
     destination = update.message.text.strip()
+    user_id = update.message.from_user.id
     
     # 顯示規劃中的訊息
     planning_msg = await update.message.reply_text(f"🔍 正在為你規劃 {destination} 的行程...")
@@ -61,7 +106,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # 先檢查資料庫
         plan = generate_plan(destination)
+        
+        # 加入天氣資訊（可選）
+        try:
+            weather_info = get_weather_sync(destination)
+            if "需要 API 金鑰" not in weather_info:
+                plan += f"\n\n{weather_info}"
+        except:
+            pass
+        
         await planning_msg.edit_text(plan, parse_mode='Markdown')
+        
+        # 儲存最後目的地供收藏使用
+        user_context[user_id] = destination
+        
     except Exception as e:
         await planning_msg.edit_text(f"❌ 抱歉，無法處理這個目的地: {destination}\n請稍後再試或嘗試其他城市。")
 
@@ -221,17 +279,43 @@ def generate_generic(destination: str) -> str:
 💡 想知道更詳細的資訊嗎？嘗試輸入「東京」、「巴黎」、「台北」等熱門城市！"""
 
 
+# 包裝收藏命令以傳遞 context
+async def save_with_context(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    args = context.args
+    
+    if not args:
+        # 嘗試使用最後規劃的目的地
+        if user_id in user_context:
+            context.args = [user_context[user_id]]
+        else:
+            await update.message.reply_text("📝 使用方式：/save <目的地>\n範例：/save 東京")
+            return
+    
+    await save_command(update, context)
+
+
 def main():
     """啟動 Bot"""
     app = Application.builder().token(BOT_TOKEN).build()
     
     # 註冊命令處理器
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("feedback", feedback_command))
+    app.add_handler(CommandHandler("prefs", prefs_command))
+    app.add_handler(CommandHandler("save", save_with_context))
+    app.add_handler(CommandHandler("saved", saved_command))
+    app.add_handler(CommandHandler("remove", remove_command))
+    app.add_handler(CommandHandler("share", share_command))
+    app.add_handler(CommandHandler("sharelink", sharelink_command))
+    app.add_handler(CommandHandler("weather", weather_command))
     
     # 註冊訊息處理器
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("🌍 旅遊規劃師 Bot 啟動中...")
+    print("📚 可用指令：/help")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
