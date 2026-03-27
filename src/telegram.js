@@ -8,6 +8,25 @@ const https = require('https');
 class TelegramClient {
   constructor(botToken) {
     this.botToken = botToken;
+    this.requestTimeout = 30000; // 30秒超時
+    
+    // 速率限制
+    this.lastRequestTime = 0;
+    this.minRequestInterval = 100; // 最小請求間隔 100ms
+  }
+
+  /**
+   * 速率限制：確保請求之間有最小間隔
+   */
+  async rateLimit() {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    if (timeSinceLastRequest < this.minRequestInterval) {
+      await new Promise(resolve => 
+        setTimeout(resolve, this.minRequestInterval - timeSinceLastRequest)
+      );
+    }
+    this.lastRequestTime = Date.now();
   }
 
   /**
@@ -17,6 +36,8 @@ class TelegramClient {
    * @returns {Promise<object>} API 回應結果
    */
   async request(method, params = {}) {
+    await this.rateLimit();
+    
     return new Promise((resolve, reject) => {
       const data = JSON.stringify(params);
       const options = {
@@ -26,7 +47,8 @@ class TelegramClient {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(data)
-        }
+        },
+        timeout: this.requestTimeout // 添加超時
       };
 
       const req = https.request(options, (res) => {
@@ -43,7 +65,16 @@ class TelegramClient {
         });
       });
 
-      req.on('error', reject);
+      req.on('error', (err) => {
+        console.error(`❌ Telegram API 錯誤: ${err.message}`);
+        reject(err);
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('請求超時'));
+      });
+
       req.write(data);
       req.end();
     });
@@ -53,13 +84,13 @@ class TelegramClient {
    * 發送文字訊息
    * @param {string|number} chatId - 聊天 ID
    * @param {string} text - 訊息內容
-   * @param {object} options - 額外選項 (parse_mode, reply_to_message_id, etc.)
+   * @param {object} options - 額外選項
    */
   async sendMessage(chatId, text, options = {}) {
     const params = {
       chat_id: chatId,
       text: text,
-      parse_mode: options.parse_mode || 'Markdown',
+      parse_mode: options.parse_mode || 'MarkdownV2', // 修復：使用 MarkdownV2
       ...options
     };
     return this.request('sendMessage', params);
@@ -67,7 +98,7 @@ class TelegramClient {
 
   /**
    * 取得 updates
-   * @param {object} options - 選項 (offset, timeout, allowed_updates)
+   * @param {object} options - 選項
    */
   async getUpdates(options = {}) {
     return this.request('getUpdates', {
