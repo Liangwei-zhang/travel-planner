@@ -20,7 +20,7 @@ if not BOT_TOKEN:
     exit(1)
 
 # 載入目的地資料庫
-DATA_PATH = Path(__file__).parent / "data" / "destinations.json"
+DATA_PATH = Path(__file__).parent.parent / "data" / "destinations.json"
 with open(DATA_PATH, "r", encoding="utf-8") as f:
     DESTINATION_DB = json.load(f)
 

@@ -4,10 +4,12 @@
  * 使用 Long Polling API，直接使用 HTTP 請求
  */
 
+require('dotenv').config();
+
 const path = require('path');
-const TelegramClient = require('./src/telegram');
-const DestinationMatcher = require('./src/matcher');
-const PlanGenerator = require('./src/generator');
+const TelegramClient = require('./telegram');
+const DestinationMatcher = require('./matcher');
+const PlanGenerator = require('./generator');
 
 // 配置 - 從環境變數讀取
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
